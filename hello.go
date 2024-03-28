@@ -21,8 +21,15 @@ func main() {
 	dst := flag.String("dst", "", "Destination file path")
 	flag.Parse()
 
-	if *src == "" || *dst == "" {
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Error: Source file path and destination directory path must be specified. Use --src and --dst flags to specify them.\n")
+		flag.PrintDefaults()
+		os.Exit(2)
 		log.Fatal("Source file path and destination directory path must be specified. Use --src and --dst flags to specify them.")
+	}
+	if *src == "" || *dst == "" {
+		flag.Usage()
+		os.Exit(1)
 	}
 
 	srcFile, err := os.Open(*src)
