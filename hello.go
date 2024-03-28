@@ -45,7 +45,29 @@ func main() {
 		if url == "" {
 			continue
 		}
-		fetchAndSave(url, *dst)
+
+		fileName, err := getFileNameFromURL(url)
+		if fileName == "" {
+			continue
+		}
+		if err != nil {
+			log.Printf("err: %v\n", err)
+			continue
+		}
+
+		respBody, err := fetchUrl(url)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		if respBody == nil {
+			continue
+		}
+
+		err = saveDst(fileName, *dst, respBody)
+		if err != nil {
+			log.Fatalf("err: %v\n", err)
+		}
 
 	}
 
@@ -53,51 +75,53 @@ func main() {
 	fmt.Printf("\nProgram execution time: %s\n", elapsed)
 }
 
-// fetchAndSave() функця считывает urlStr и пытается отправть get запрос по этому url,
-// затем, если успешный запрос, сохраняет полученый body с запроса и сохраняет по
-// пути dst
-func fetchAndSave(url, dst string) {
+// fetchUrl() получает url и пытается выполнить get запрос по этому url
+// и вернуть Body если получается вернуть resp с get запроса
+func fetchUrl(url string) (io.ReadCloser, error) {
 	resp, err := http.Get(url)
-	if err != nil {
-		log.Printf("Error fetching URL: %v\n", err)
-		return
-	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		log.Printf("Unexpected status code for URL %s: %d\n", url, resp.StatusCode)
-		return
+	if err != nil {
+		return nil, fmt.Errorf("Error fetching URL: %v", err)
 	}
 
-	fileName, err := getFileNameFromURL(url)
-	if fileName == "" {
-		return
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("Unexpected status code for URL %s: %d\n", url, resp.StatusCode)
 	}
-	if err != nil {
-		log.Printf("err: %v\n", err)
-	}
+
+	return resp.Body, nil
+}
+
+// saveDst() получает fileName - имя файла в который необходимо записать respBody - тело запроса плученного с помощью get
+// и сохранить respBody по пути dst если путь ./, то создается ./list в которую записывается файл
+func saveDst(fileName, dst string, respBody io.ReadCloser) error {
+	defer respBody.Close()
+
 	fileName = fmt.Sprintf("%s.html", fileName)
 
 	if dst == "./" {
 		dst = "./list"
 		err := os.MkdirAll(dst, 0755)
 		if err != nil {
-			log.Fatalf("Error creating folder %s: %v\n", dst, err)
+			return fmt.Errorf("Error creating folder %s: %v\n", dst, err)
 		}
 	}
 	filePath := filepath.Join(dst, fileName)
 
 	dstFile, err := os.Create(filePath)
 	if err != nil {
-		log.Fatalf("Error creating destination file: %v\n", err)
+		return fmt.Errorf("Error creating destination file %s: %v\n", dst, err)
 	}
-	_, err = io.Copy(dstFile, resp.Body)
 	defer dstFile.Close()
 
+	_, err = io.Copy(dstFile, respBody)
+
 	if err != nil {
-		log.Fatalf("Error copying content: %v\n", err)
+		return fmt.Errorf("Error copying content: %v\n", err)
 	}
+
 	fmt.Printf("File copied successfully to \n%s\n", filePath)
+	return nil
 }
 
 // getFileNameFromURL() функция получает url сайт
