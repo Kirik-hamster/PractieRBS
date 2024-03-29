@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -47,17 +48,18 @@ func main() {
 		}
 
 		fileName, err := getFileNameFromURL(url)
-		if fileName == "" {
+
+		if err != nil {
+			log.Println(err)
 			continue
 		}
-		if err != nil {
-			log.Printf("err: %v\n", err)
+		if fileName == "" {
 			continue
 		}
 
 		respBody, err := fetchUrl(url)
 		if err != nil {
-			log.Println(err)
+			log.Printf("Ошибка: %v\n", err)
 			continue
 		}
 		if respBody == nil {
@@ -79,14 +81,14 @@ func main() {
 // и вернуть Body если получается вернуть resp с get запроса
 func fetchUrl(url string) (io.ReadCloser, error) {
 	resp, err := http.Get(url)
-
 	if err != nil {
-		return nil, fmt.Errorf("Error fetching URL: %v", err)
+		return nil, errors.New(fmt.Sprintf("Error fetching URL: %v", err))
+
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		return nil, fmt.Errorf("Unexpected status code for URL %s: %d\n", url, resp.StatusCode)
+		return nil, errors.New(fmt.Sprintf("Unexpected status code for URL %s: %d\n", url, resp.StatusCode))
 	}
 
 	return resp.Body, nil
@@ -103,24 +105,24 @@ func saveDst(fileName, dst string, respBody io.ReadCloser) error {
 		dst = "./list"
 		err := os.MkdirAll(dst, 0755)
 		if err != nil {
-			return fmt.Errorf("Error creating folder %s: %v\n", dst, err)
+			return errors.New(fmt.Sprintf("Error creating folder %s: %v\n", dst, err))
 		}
 	}
 	filePath := filepath.Join(dst, fileName)
 
 	dstFile, err := os.Create(filePath)
 	if err != nil {
-		return fmt.Errorf("Error creating destination file %s: %v\n", dst, err)
+		return errors.New(fmt.Sprintf("Error creating destination file %s: %v\n", dst, err))
 	}
 	defer dstFile.Close()
 
 	_, err = io.Copy(dstFile, respBody)
 
 	if err != nil {
-		return fmt.Errorf("Error copying content: %v\n", err)
+		return errors.New(fmt.Sprintf("Error copying content: %v\n", err))
 	}
 
-	fmt.Printf("File copied successfully to \n%s\n", filePath)
+	fmt.Printf("File copied successfully to %s\n\n", filePath)
 	return nil
 }
 
@@ -128,12 +130,15 @@ func saveDst(fileName, dst string, respBody io.ReadCloser) error {
 // и возвращает имя файла на основе доменного имени url
 func getFileNameFromURL(siteURL string) (string, error) {
 	parsedURL, err := url.Parse(siteURL)
+
 	if err != nil {
+
 		return "", err
 	}
-
 	domain := strings.TrimPrefix(parsedURL.Host, "www.")
-
+	if domain == "" {
+		return "", errors.New(fmt.Sprintf("Error: no such site with name: %s\n", siteURL))
+	}
 	if strings.Contains(domain, ":") {
 		domain = strings.Split(domain, ":")[0]
 	}
